@@ -34,6 +34,18 @@ describe("Parser", function() {
         it("2 + 3 * foo.bar.baz", function() {
             expect(Parser.evaluate("2 + 3 * foo.bar.baz", {foo: {bar: {baz: 4}}})).to.equal(14);
         });
+        it("a + b + c", function() {
+            expect(Parser.evaluate("a + b + c", {a:'a',b:'b',c:'c'})).to.equal('abc');
+        });
+        it("x == ''", function() {
+            expect(Parser.evaluate("x==''", {x:''})).to.equal(true);
+        });
+        it("_x + $j$ + 1", function() {
+            expect(Parser.evaluate("_x+$j$+1", {_x:1,$j$:1})).to.equal(3);
+        });
+        it("_open + $input + _close", function() {
+            expect(Parser.evaluate("_open + $input +_close", {$input:'div',_open:'<',_close:'>'})).to.equal('<div>');
+        });
     });
     describe("#substitute()", function() {
         var expr = Parser.parse("2 * x + 1");
@@ -66,6 +78,13 @@ describe("Parser", function() {
         });
         it("6.283185307179586", function() {
             expect(expr.evaluate({ x: 2 })).to.equal(6.283185307179586);
+        });
+        var expr2 = Parser.parse("_open + $comment + _close").simplify({ _open: '<!-- ',_close:' -->' });
+        it("_open + $comment + _close", function() {
+            expect(expr2.toString()).to.equal("(('<!-- '+$comment)+' -->')");
+        });
+        it("comment: ok", function() {
+            expect(expr2.evaluate({ $comment: 'comment:ok' })).to.equal('<!-- comment:ok -->');
         });
     });
     describe("#variables()", function() {
