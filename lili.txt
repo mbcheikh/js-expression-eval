@@ -1,0 +1,183 @@
+commit 47823bbb6158fe98cfb2333794ea7fe5b2c26a9b
+Author: Mourad Ben Cheikh <mbcheikh@google.com>
+Date:   Thu Jul 21 14:58:34 2016 +0100
+
+    allowing '_' in variable names
+
+diff --git a/test/parserSpec.js b/test/parserSpec.js
+index 0a11b2a..5a95439 100644
+--- a/test/parserSpec.js
++++ b/test/parserSpec.js
+@@ -34,6 +34,18 @@ describe("Parser", function() {
+         it("2 + 3 * foo.bar.baz", function() {
+             expect(Parser.evaluate("2 + 3 * foo.bar.baz", {foo: {bar: {baz: 4}}})).to.equal(14);
+         });
++        it("a + b + c", function() {
++            expect(Parser.evaluate("a + b + c", {a:'a',b:'b',c:'c'})).to.equal('abc');
++        });
++        it("x == ''", function() {
++            expect(Parser.evaluate("x==''", {x:''})).to.equal(true);
++        });
++        it("_x + $j$ + 1", function() {
++            expect(Parser.evaluate("_x+$j$+1", {_x:1,$j$:1})).to.equal(3);
++        });
++        it("_open + $input + _close", function() {
++            expect(Parser.evaluate("_open + $input +_close", {$input:'div',_open:'<',_close:'>'})).to.equal('<div>');
++        });
+     });
+     describe("#substitute()", function() {
+         var expr = Parser.parse("2 * x + 1");
+@@ -67,6 +79,13 @@ describe("Parser", function() {
+         it("6.283185307179586", function() {
+             expect(expr.evaluate({ x: 2 })).to.equal(6.283185307179586);
+         });
++        var expr2 = Parser.parse("_open + $comment + _close").simplify({ _open: '<!-- ',_close:' -->' });
++        it("_open + $comment + _close", function() {
++            expect(expr2.toString()).to.equal("(('<!-- '+$comment)+' -->')");
++        });
++        it("comment: ok", function() {
++            expect(expr2.evaluate({ $comment: 'comment:ok' })).to.equal('<!-- comment:ok -->');
++        });
+     });
+     describe("#variables()", function() {
+         var expr = Parser.parse("x * (y * atan(1)) + z.y.x");
+
+commit 4df338041110da34f52c24689cdaf32182a96b31
+Author: Matthew Crumley <email@matthewcrumley.com>
+Date:   Mon May 30 16:20:48 2016 -0400
+
+    Add simple support for objects.
+    
+    Example: Parser.parse("bar.baz * (y * foo(1))").evaluate({ bar: { baz: 3 }, y: 4})
+
+diff --git a/parser.js b/parser.js
+index 3413cd8..69631ad 100644
+--- a/parser.js
++++ b/parser.js
+@@ -92,6 +92,29 @@ var Parser = (function (scope) {
+ 		return v;
+ 	}
+ 
++	function hasValue(values, index) {
++		var parts = index.split(/\./);
++		var value = values;
++		var part;
++		while (part = parts.shift()) {
++			if (!(part in value)) {
++				return false;
++			}
++			value = value[part];
++		}
++		return true;
++	}
++
++	function getValue(values, index) {
++		var parts = index.split(/\./);
++		var value = values;
++		var part;
++		while (part = parts.shift()) {
++			value = value[part];
++		}
++		return value;
++	}
++
+ 	Expression.prototype = {
+ 		simplify: function (values) {
+ 			values = values || {};
+@@ -109,8 +132,8 @@ var Parser = (function (scope) {
+ 				if (type_ === TNUMBER) {
+ 					nstack.push(item);
+ 				}
+-				else if (type_ === TVAR && (item.index_ in values)) {
+-					item = new Token(TNUMBER, 0, 0, values[item.index_]);
++				else if (type_ === TVAR && hasValue(values, item.index_)) {
++					item = new Token(TNUMBER, 0, 0, getValue(values, item.index_));
+ 					nstack.push(item);
+ 				}
+ 				else if (type_ === TOP2 && nstack.length > 1) {
+@@ -189,11 +212,11 @@ var Parser = (function (scope) {
+ 					nstack.push(f(n1, n2));
+ 				}
+ 				else if (type_ === TVAR) {
+-					if (item.index_ in values) {
+-						nstack.push(values[item.index_]);
++					if (hasValue(values, item.index_)) {
++						nstack.push(getValue(values, item.index_));
+ 					}
+-					else if (item.index_ in this.functions) {
+-						nstack.push(this.functions[item.index_]);
++					else if (hasValue(this.functions, item.index_)) {
++						nstack.push(getValue(this.functions, item.index_));
+ 					}
+ 					else {
+ 						throw new Error("undefined variable: " + item.index_);
+@@ -1044,7 +1067,7 @@ var Parser = (function (scope) {
+ 			for (var i = this.pos; i < this.expression.length; i++) {
+ 				var c = this.expression.charAt(i);
+ 				if (c.toUpperCase() === c.toLowerCase()) {
+-					if (i === this.pos || (c != '_' && (c < '0' || c > '9'))) {
++					if (i === this.pos || (c != '_' && c != '.' && (c < '0' || c > '9'))) {
+ 						break;
+ 					}
+ 				}
+diff --git a/test/parserSpec.js b/test/parserSpec.js
+index 6812be2..0a11b2a 100644
+--- a/test/parserSpec.js
++++ b/test/parserSpec.js
+@@ -28,6 +28,12 @@ describe("Parser", function() {
+         it("(-3)^x", function() {
+             expect(Parser.evaluate("(-3)^x", {x: 4})).to.equal(81);
+         });
++        it("2 ^ x.y", function() {
++            expect(Parser.evaluate("2^x.y", {x: { y: 3} })).to.equal(8);
++        });
++        it("2 + 3 * foo.bar.baz", function() {
++            expect(Parser.evaluate("2 + 3 * foo.bar.baz", {foo: {bar: {baz: 4}}})).to.equal(14);
++        });
+     });
+     describe("#substitute()", function() {
+         var expr = Parser.parse("2 * x + 1");
+@@ -35,6 +41,23 @@ describe("Parser", function() {
+         it("((2*(4*x))+1)", function() {
+             expect(expr2.evaluate({ x: 3})).to.equal(25);
+         });
++
++        var expr3 = Parser.parse("2 * x.y.z + 1");
++        var expr4 = expr3.substitute("x.y.z", "4 * x");
++        it("((2*(4*x))+1)", function() {
++            expect(expr4.evaluate({ x: 3 })).to.equal(25);
++        });
++
++        var expr5 = Parser.parse("2 * x.y.z + 1");
++        var expr6 = expr5.substitute("x.y.z", "4 * x.y.z");
++        it("((2*(4*x.y.z))+1)", function() {
++            expect(expr6.evaluate({ x: { y: { z: 3 } } })).to.equal(25);
++        });
++
++        var expr7 = expr.substitute("x", "4 * x.y.z");
++        it("((2*(4*x.y.z))+1)", function() {
++            expect(expr7.evaluate({ x: { y: { z: 3 } } })).to.equal(25);
++        });
+     });
+     describe("#simplify()", function() {
+         var expr = Parser.parse("x * (y * atan(1))").simplify({ y: 4 });
+@@ -46,12 +69,15 @@ describe("Parser", function() {
+         });
+     });
+     describe("#variables()", function() {
+-        var expr = Parser.parse("x * (y * atan(1))");
+-        it("['x', 'y']", function() {
+-            expect(expr.variables()).to.have.same.members(['x', 'y']);
++        var expr = Parser.parse("x * (y * atan(1)) + z.y.x");
++        it("['x', 'y', 'z.y.x']", function() {
++            expect(expr.variables()).to.have.same.members(['x', 'y', 'z.y.x']);
++        });
++        it("['x', 'z.y.x']", function() {
++            expect(expr.simplify({y: 4}).variables()).to.have.same.members(['x', 'z.y.x']);
+         });
+         it("['x']", function() {
+-            expect(expr.simplify({y: 4}).variables()).to.have.same.members(['x']);
++            expect(expr.simplify({y: 4, z: { y: { x: 5 } } }).variables()).to.have.same.members(['x']);
+         });
+     });
+     describe("#equal()", function() {

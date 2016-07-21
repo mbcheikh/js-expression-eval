@@ -325,7 +325,7 @@ var Parser = (function (scope) {
 	};
 
 	function add(a, b) {
-		return Number(a) + Number(b);
+		return a + b;
 	}
 	function sub(a, b) {
 		return a - b;
@@ -1067,7 +1067,7 @@ var Parser = (function (scope) {
 			for (var i = this.pos; i < this.expression.length; i++) {
 				var c = this.expression.charAt(i);
 				if (c.toUpperCase() === c.toLowerCase()) {
-					if (i === this.pos || (c != '_' && c != '.' && (c < '0' || c > '9'))) {
+					if ((i === this.pos && c !='_' && c != '$')|| (c != '_' && c != '$' && c != '.' && (c < '0' || c > '9'))) {
 						break;
 					}
 				}
